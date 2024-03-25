@@ -1,7 +1,5 @@
-# base-API-script
-This repo can be used as a starting point for developing a Python script that utilizes the Plextrac API in some way. It acts as a mini framework with some helpful utilities that make endpoint calls easier. These utilities include a logger, authentication handler, API wrapper library that stores endpoint URLs, and other general utility function that revolve around user inputs, data sanitization, and data validation.
-
-To get started make a copy of this repo and read through the main.py file which goes more in-depth about the utilities available. You can also run the script with the instructions below to see the output of the examples used when describing the utilities available. Once you know what's available, you can remove the examples, and start writing your script in the main.py file.
+# parser-action-csv-export
+This Python script automates the process of exporting parser actions from a Plextrac instance via API to a CSV file. It prompts the user to select a parser, and then fetches the corresponding parser actions. The exported CSV file includes detailed information about each parser action, including some details about any linked writeups.
 
 # Requirements
 - [Python 3+](https://www.python.org/downloads/)
@@ -38,7 +36,8 @@ The following values can either be added to the `config.yaml` file or entered wh
 - Password
 
 ## Script Execution Flow
-- Starts executing the main.py file
-- Prints script info stored in settings.py
-- Reads in values from config.yaml file
-- Goes through list of examples to show the user current functionality that can be utilized
+- Autenticates to instnace of Plextrac
+- Loads parser information from instance
+- Prompts user to select a specific parser
+- Fetches parser actions for selected parser
+- Saves fetched data, including linked writeup details, to a CSV file

@@ -1,10 +1,108 @@
 import yaml
+import time
+from copy import deepcopy
+import csv
+import time
 
 import settings
 import utils.log_handler as logger
 log = logger.log
 from utils.auth_handler import Auth
 import utils.input_utils as input
+import utils.general_utils as utils
+import api
+
+
+def get_parser_choice(parsers) -> int:
+    """
+    Prompts the user to select from a list of parsers to export related parser actions to CSV.
+    Based on subsequently called functions, this will return a valid option or exit the script.
+
+    :param repos: List of parsers returned from the GET Get Tenant Parsers endpoint
+    :type repos: list[parser objects]
+    :return: 0-based index of selected parser from the list provided
+    :rtype: int
+    """
+    log.info(f'List of Parsers:')
+    index = 1
+    for parser in parsers:
+        log.info(f'{index} - Name: {parser["name"]}')
+        index += 1
+    return input.user_list("Select a parser/scan tool to export parser actions from", "Invalid choice", len(parsers)) - 1
+
+def get_page_of_parser_actions(parser_id: str, page: int = 0, actions: list = [], total_actions: int = -1) -> None:
+    """
+    Handles traversing pagination results to create a list of all items.
+
+    :param page: page to start on, for all results use 0, defaults to 0
+    :type page: int, optional
+    :param assets: the list passed in will be added to, acts as return, defaults to []
+    :type assets: list, optional
+    :param total_assets: used for recursion to know when all pages have been gathered, defaults to -1
+    :type total_assets: int, optional
+    """
+    log.info(f'Load page {page} of parser actions...')
+    offset = page*1000
+    limit = 1000
+    # region EXAMPLE schema of returned parser actions
+        # {
+        #     "id": "10028",
+        #     "action": "LINK",
+        #     "severity": "Medium",
+        #     "writeupID": "101219",
+        #     "log_trail": [
+        #         {
+        #             "updated_by": {
+        #                 "user_id": 13338,
+        #                 "name": {
+        #                     "first": "Jordan",
+        #                     "last": "Treasure"
+        #                 }
+        #             },
+        #             "updated_at": 1701906483227,
+        #             "action": "LINK",
+        #             "severity": "Medium",
+        #             "writeupID": "11407137"
+        #         }
+        #     ],
+        #     "title": "DNS Server BIND version Directive Remote Version Detection",
+        #     "description": "The remote host is running BIND or another DNS server that reports its version number when it receives a special request for the text 'version.bind' in the domain 'chaos'. \n\nThis version is not necessarily accurate and could even be forged, as some DNS servers send the information based on a configuration file.\n",
+        #     "writeup": {
+        #         "description": "Open redirection vulnerabilities arise when an application incorporates user-controllable data into the target of a redirection in an unsafe way. An attacker can construct a URL within the application that causes a redirection to an arbitrary external domain. This behavior can be leveraged to facilitate phishing attacks against users of the application. The ability to use an authentic application URL, targeting the correct domain and with a valid SSL certificate (if SSL is used), lends credibility to the phishing attack because many users, even if they verify these features, will not notice the subsequent redirection to a different domain.\n",
+        #         "doc_id": 101219,
+        #         "doc_type": "template",
+        #         "fields": {},
+        #         "isDeleted": false,
+        #         "id": "template_101219",
+        #         "repositoryId": "cl6cg379h01km17lbeg713x1w",
+        #         "recommendations": "If possible, applications should avoid incorporating user-controllable data into redirection targets. In many cases, this behavior can be avoided in two ways:\nRemove the redirection function from the application, and replace links to it with direct links to the relevant target URLs.\nMaintain a server-side list of all URLs that are permitted for redirection. Instead of passing the target URL as a parameter to the redirector, pass an index into this list.\n\nIf it is considered unavoidable for the redirection function to receive user-controllable input and incorporate this into the redirection target, one of the following measures should be used to minimize the risk of redirection attacks:\nThe application should use relative URLs in all of its redirects, and the redirection function should strictly validate that the URL received is a relative URL.\nThe application should use URLs relative to the web root for all of its redirects, and the redirection function should validate that the URL received starts with a slash character. It should then prepend http://yourdomainname.com to the URL before issuing the redirect.\nThe application should use absolute URLs for all of its redirects, and the redirection function should verify that the user-supplied URL begins with http://yourdomainname.com/ before issuing the redirect.\n\nStored open redirection vulnerabilities arise when the applicable input was submitted in an previous request and stored by the application. This is often more serious than reflected open redirection because an attacker might be able to place persistent input into the application which, when viewed by other users, causes their browser to invisibly redirect to a domain of the attacker's choice.\n",
+        #         "references": "- Using Burp to Test for Open Redirections(https://support.portswigger.net/customer/portal/articles/1965733-Methodology_Testing%20for%20Open%20Redirections.html)\n- Fun With Redirects(https://www.owasp.org/images/b/b9/OWASP_Appsec_Research_2010_Redirects_XSLJ_by_Sirdarckcat_and_Thornmaker.pdf)\n\nCWE-601: URL Redirection to Untrusted Site ('Open Redirect')\n",
+        #         "severity": "Medium",
+        #         "source": "Burp",
+        #         "tenantId": 0,
+        #         "title": "Open redirection (stored)",
+        #         "updatedAt": 1701714762104,
+        #         "writeupAbbreviation": "DEF-1"
+        #     },
+        #     "original_severity": "Informational",
+        #     "writeupLabel": "Open redirection (stored)"
+        # }
+    # endregion
+    try:
+        response = api.parser_actions.get_tenant_parser_actions(auth.base_url, auth.get_auth_headers(), auth.tenant_id, parser_id, limit, offset)
+    except Exception as e:
+        log.critical(f'Could not retrieve parser actions from instance. Exiting...')
+        exit()
+        
+    total_actions = int(response.json['actions']['total_items'])
+    if len(response.json['actions']['actions']) > 0:
+        actions += deepcopy(response.json['actions']['actions'])
+    
+    if len(actions) < total_actions:
+        return get_page_of_parser_actions(parser_id, page+1, actions, total_actions)
+    
+    return None
+
 
 
 if __name__ == '__main__':
@@ -14,176 +112,88 @@ if __name__ == '__main__':
     with open("config.yaml", 'r') as f:
         args = yaml.safe_load(f)
 
-
-    """
-    Config File
-
-    The `args` variable (created above) stores all the info entered on the config.yaml file. This is a dictionary created from
-    the parsed yaml file.
-    
-    This is passed to the `Auth` object to try and load the instance URL, username, and password for authentication, but you
-    can add other fields you need as well.
-    """
-    log.info(args)
-    log.info(args.get('instance_url'))
-
-
-    """
-    Authenticate to Plextrac Instance
-
-    To handle authentication you can create an Auth object that stores different things needed to make calls to API endpoints.
-    This info includes the URL of the PT instance you're authenticated to and user credentials used to successfully authenticate.
-    After authentication, it creates and stores the authorization headers sent with requests to API endpoints.
-
-    Below is an example of creating an Auth object. Calling the `handle_authentication` method and passing in the args from the
-    config file tries to authenticate you to the PT instance in the config with the user credentials in the config. If either of
-    these values are not in the config the user is prompted to enter them on the terminal the script was ran from.
-    """
     auth = Auth(args)
     auth.handle_authentication()
 
+    # load all plugins from instance
+    log.info(f'Loading Parsers from instance')
+    parsers = []
+    try:
+        response = api.parser_actions.get_tenant_parsers(auth.base_url, auth.get_auth_headers(), auth.tenant_id)
+        parsers = response.json['parsers']
+    except Exception as e:
+        log.exception(e)
 
-    """
-    Using Authentication
-
-    After creating an Auth object and getting authenticated, you can use the info stored on this object to call PT API endpoints
-    as you build out your script. You can use the following data:
-
-    auth.base_url - the url the user was authenticated to (ex. https://example.plextrac.com)
-    auth.get_auth_headers() - returns the current Authorization headers (handles reauthenticating if expired)
-    auth.tenant_id - the tenant id the user was authenticated to (required by some endpoints)
-    """
-    log.info(f'Authenticated to {auth.base_url} on tenant {auth.tenant_id}')
-    log.info(f'Authentication headers: {auth.get_auth_headers()}')
-
-
-    """
-    Built-in API Endpoints
-
-    You can use the currently built-out API endpoints in the /api folder. This is a wrapper library that contains the specific URLs of all endpoints.
-    
-    Use the import statement: import api
-    
-    You can now make an API request by calling api.<folder>.<file>.<endpoint_name>(parameters...) and adding the necessary parameters. The
-    `base_url` and `headers` parameter is required for every endpoint that required authentication. This information is stored on the Auth
-    object created in the example above.
-    """
-    import api
-
-    client_id = "<id_of_client>"
-    response = api.clients.get_client(auth.base_url, auth.get_auth_headers(), client_id)
+    # log.debug(f'list of loaded parsers:\n{parsers}')
+    log.success(f'Loaded {len(parsers)} parser(s) from instance')
+    if len(parsers) < 1:
+        log.critical(f'Did not load any parsers from instance. Exiting...')
+        exit()
 
 
-    """
-    Retrying API Requests
-
-    If one of the built-in API endpoint's request fails it will retry the same request up to the number of times as specified in the setting.py file.
-    When retrying it will print the exception and continue. After this number of failed attempts it will raise exceptions instead of printing them.
-
-    By default the number of retries is 5. Change this in the setting.py file
-    """
-    # EXAMPLE Built-in API call
-    # import api
-
-    # client_id = "<id_of_client>"
-    # response = api._v1.clients.get_client(auth.base_url, auth.get_auth_headers(), client_id)
-    
-    # EXAMPLE Console on Failure
-    # >>> [EXCEPTION] Request failed - Get Client. Retrying... (1/5)
-    #     Exception: ('Connection aborted.', ConnectionResetError(10054, 'An existing connection was forcibly closed by the remote host', None, 10054, None))
-    #     Traceback (most recent call last):
-    #     etc...
+    # prompt user to select a parser for export
+    while True:
+        choice = get_parser_choice(parsers)
+        if input.continue_anyways(f'Export parser actions for \'{parsers[choice]["name"]}\' to CSV?'):
+            break
+    selected_parser = parsers[choice]
 
 
-    """
-    Logging Wrapper
-
-    Any logging can be done using a custom wrapper for the Python logging module. This wrapper handles color formatting of logs to the console and optional output file.
-    
-    Use the import statement, then set the reference to the custom logging wrapper:
-    import utils.log_handler as logger
-    log = logger.log
-
-    You can now write to logs with log.<message-type>("<message>")
-
-    Define the following logging setting in settings.py:
-    - console logging level
-    - output file logging level
-    - whether the script should save logs to a file
-    """
-    log.warning("You are warned")
-    log.info("Here is some info")
-    log.success("Congrats!")
+    # set file path for exported CSV
+    parser_time_seconds: float = time.time()
+    parser_time: str = time.strftime("%Y_%m_%d_%H_%M_%S", time.localtime(parser_time_seconds))
+    FILE_PATH = f'{utils.sanitize_file_name(selected_parser["name"]).lower()}_parser_actions_export_{parser_time}.csv'
 
 
-    """
-    Bulk Iteration Metrics
-
-    You are able to print metrics about an action using the IterationMetrics object in the log_handler.py. This will manage time tracking and gives you a simple function
-    that returns a string of the current iterations metrics. If you are doing an action in a loop, i.e. calling the same endpoint, this can be used to show metrics for
-    how long the script has been running and how long it should take to complete.
-
-    Use the import statement, then create a new IterationMetrics object. Note the counter starts upon creation, so this line should go right before the loop:
-    from utils.log_handler import IterationMetrics
-
-    metrics = IterationMetrics(<num_items_in_list>)
-
-    Now calling the print_iter_metrics() function will calculate the stats of the current interation, increment to the next iteration, and return a string with the
-    calculated metrics. This should be called at the end of a loop.
-    """
-    import time # only imported in this example to use sleep
-
-    from utils.log_handler import IterationMetrics
-
-    items = range(5)
-    metrics = IterationMetrics(len(items)) # time starts ticking when the IterationMetrics object is created
-    for i in items:
-        log.info("Working...")
-        time.sleep(3)
-        log.success(f'Finished the work.')
-        log.info(metrics.print_iter_metrics())
+    # get all parser actions in user selected client
+    log.info(f'Getting Parser Actions from selected Parser')
+    loaded_parser_actions = []
+    get_page_of_parser_actions(selected_parser['id'], 0, actions=loaded_parser_actions)
+    log.debug(f'list of loaded parser actions:\n{loaded_parser_actions}')
+    log.success(f'Loaded {len(loaded_parser_actions)} parser actions for {selected_parser["name"]}')
 
 
-    """
-    Built-in User Input Handling
+    # CREATE CSV
+    # define headers
+    headers = ["plugin_id", "title", "action", "severity", "original_severity", "description", "last_updated_at", "writeup_id", "writeup_title", "writeup_abbreviation", "writeup_repository_id"]
 
-    You can use a wrapper for the Python input() function by utilizing the input_utils.py. This will add a prefix to all user prompts and
-    define some validation rules as to the user input.
+    # pluck parser action data from API response and format as list for CSV
+    csv_parser_actions = []
+    for parser_action in loaded_parser_actions:
+        # last updated at - parsed from log_trail
+        last_updated_at = ""
+        if len(parser_action.get("log_trail", [])) > 0:
+            updated_at_time_stamps = list(map(lambda x: x['updated_at'], parser_action.get("log_trail", [])))
+            last_updated_at_ms = max(updated_at_time_stamps)
+            last_updated_at = time.strftime("%b %d, %Y", time.gmtime(last_updated_at_ms/1000))
+        # writeup fields - if there is an attached writeup
+        writeup_id = parser_action.get("writeupID", "")
+        if writeup_id == None:
+            writeup_id = ""
+        writeup_title = parser_action.get("writeupLabel", "")
+        if writeup_title == None:
+            writeup_title = ""
+        # all fields
+        fields_for_csv = [
+            parser_action.get("id", ""),
+            parser_action.get("title", ""),
+            parser_action.get("action", ""),
+            parser_action.get("severity", ""),
+            parser_action.get("original_severity", ""),
+            parser_action.get("description", ""),
+            last_updated_at,
+            writeup_id,
+            writeup_title,
+            parser_action.get("writeup", {}).get("writeupAbbreviation", ""),
+            parser_action.get("writeup", {}).get("repositoryId", "")
+        ]
 
-    Use the import statement: import utils.input_utils as input
-    
-    You can now use the following wrapper options:
-    - user_options
-    - user_list
-    - continue_anyways
-    - retry
-    - load_json_data
-    - load_csv_data
+        # add parser action to list to be written to csv
+        csv_parser_actions.append(fields_for_csv)
 
-    All options will continue to prompt the user until a valid input has been entered or selected, or exit the script.
-    """
-    # user_options
-    val = input.user_options("Select an option", "That wasn't a valid optoin", ["1", "2", "3"])
-    log.info(f'Selected {val}')
-
-    # user_list
-    option_list = ["apple", "banana", "pear"]
-    for index, option in enumerate(option_list):
-        log.info(f'{index+1} - {option}')
-    val = input.user_list("Select an option", "That wasn't a valid optoin", len(option_list))
-    log.info(f'Selected {val}')
-
-    # continue_anyways
-    val = input.continue_anyways("You ran into an example problem")
-    log.info(f'Selected {val}')
-
-    # retry
-    if input.retry("An example previous input was invalid. Selecting 'n' will exit the script"):
-        log.info("You chose to retry instead of exiting the script")
-
-
-    """
-    Built-in General Utility Helper
-
-    There are a handful of helpful functions in the general_utils.py file. These mostly involve data sanitation or validation
-    """
+    # WRITE CSV
+    with open(FILE_PATH, 'w', newline="", encoding="utf-8") as file:
+        writer = csv.writer(file)
+        writer.writerow(headers)
+        writer.writerows(csv_parser_actions)
+    log.success(f'Saved parser actions to CSV \'{FILE_PATH}\'')

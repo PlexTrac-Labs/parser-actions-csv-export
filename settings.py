@@ -3,7 +3,7 @@ import logging
 
 # LOGGING
 console_log_level = logging.INFO
-file_log_level = logging.INFO
+file_log_level = logging.WARNING
 save_logs_to_file = False
 
 # REQUESTS
@@ -12,14 +12,14 @@ save_logs_to_file = False
 verify_ssl = True
 # number of times to rety a request before throwing an error. will only throw the last error encountered if
 # number of retries is exceeded. set to 0 to disable retrying requests
-retries = 5
+retries = 0
 
 # description of script that will be print line by line when the script is run
 script_info = ["====================================================================",
-               "= Base API Script                                                  =",
+               "= Parser Action CSV Export                                         =",
                "=------------------------------------------------------------------=",
-               "= Use this script as a starting point to utilize existing          =",
-               "= funtionality when developing a script for the Plextrac API       =",
+               "= Automates exporting parser actions from Plextrac via API to a    =",
+               "= CSV file.                                                        =",
                "=                                                                  =",
                "===================================================================="
             ]
