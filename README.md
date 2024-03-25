@@ -36,7 +36,7 @@ The following values can either be added to the `config.yaml` file or entered wh
 - Password
 
 ## Script Execution Flow
-- Autenticates to instnace of Plextrac
+- Authenticates to instance of Plextrac
 - Loads parser information from instance
 - Prompts user to select a specific parser
 - Fetches parser actions for selected parser
