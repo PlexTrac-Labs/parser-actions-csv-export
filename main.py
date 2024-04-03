@@ -173,6 +173,16 @@ if __name__ == '__main__':
         writeup_title = parser_action.get("writeupLabel", "")
         if writeup_title == None:
             writeup_title = ""
+        writeup_abbreviation = ""
+        repository_id = ""
+        writeup = parser_action.get("writeup")
+        if writeup != None:
+            writeup_abbreviation = writeup.get("writeupAbbreviation", "")
+            if writeup_abbreviation == None:
+                writeup_abbreviation = ""
+            repository_id = writeup.get("repositoryId", "")
+            if repository_id == None:
+                repository_id = ""
         # all fields
         fields_for_csv = [
             parser_action.get("id", ""),
@@ -184,8 +194,8 @@ if __name__ == '__main__':
             last_updated_at,
             writeup_id,
             writeup_title,
-            parser_action.get("writeup", {}).get("writeupAbbreviation", ""),
-            parser_action.get("writeup", {}).get("repositoryId", "")
+            writeup_abbreviation,
+            repository_id
         ]
 
         # add parser action to list to be written to csv
